@@ -85,3 +85,23 @@ freely — your AI remembers, because it's the same mind.
 ---
 
 MIT · part of the OracleX system · 🤖 built with Claude Code
+
+## Offline mirror (optional)
+
+Keep a **read-only** local copy of the mother brain so `muninn_*` / local search work
+offline. One-way (mother → you) via SQLite `.backup` (consistent snapshot) — never writes
+back, so no conflicts. Online you still write to the mother (`brain_learn`).
+
+```bash
+# one-shot
+BRAIN_HOST=oraclex ./brain-mirror.sh        # ssh host to your mother
+
+# automatic (macOS, every 6h)
+cp brain-mirror.sh ~/.oraclex/brain-mirror.sh
+sed "s#HOME#$HOME#g" com.oraclex.brain-mirror.plist.example > ~/Library/LaunchAgents/com.oraclex.brain-mirror.plist
+launchctl load ~/Library/LaunchAgents/com.oraclex.brain-mirror.plist
+```
+
+Needs SSH access to the mother. Pulls `oracle.db` (consistent snapshot) + `ψ/`, removes
+stale `-wal/-shm`, and verifies `PRAGMA integrity_check`. **Online = write mother only**
+(don't double-write); the mirror keeps the local copy fresh.
