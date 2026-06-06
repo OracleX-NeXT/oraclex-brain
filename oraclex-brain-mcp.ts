@@ -59,24 +59,23 @@ async function arraSearch(q: string, limit = 8, type = "all") {
   }).join("\n\n");
 }
 
-async function brainLearn(title: string, content: string, concepts: string[] = [], type = "learning") {
-  fs.mkdirSync(LEARN_DIR, { recursive: true });
-  const id = `${today()}_${slug(title)}`;
-  const file = path.join(LEARN_DIR, `${id}.md`);
-  const fm = [
-    "---", `id: learning_${id}`, `type: ${type}`, `title: ${title.replace(/\n/g, " ")}`,
-    `concepts: [${concepts.map((c) => JSON.stringify(c)).join(", ")}]`,
-    `created: ${today()}`, "source: brain-http", "---", "", `# ${title}`, "", content, "",
-  ].join("\n");
-  fs.writeFileSync(file, fm, "utf8");
-  // incremental index (best-effort, fast — hash-based skip of unchanged)
-  let indexed = false;
+async function brainLearn(title: string, content: string, concepts: string[] = [], _type = "learning") {
+  // Use arra's proper single-doc learn pipeline (POST /api/learn → handleLearn):
+  // writes the file + inserts FTS + embeds via Ollama, immediately searchable,
+  // and does NOT trigger the full-reindex data-loss guard.
+  const pattern = `# ${title}\n\n${content}`;
   try {
-    const p = Bun.spawn(["bun", INDEXER], { cwd: path.dirname(path.dirname(INDEXER)), env: { ...process.env, ORACLE_REPO_ROOT: VAULT }, stdout: "ignore", stderr: "ignore" });
-    await Promise.race([p.exited, new Promise((r) => setTimeout(r, 12000))]);
-    indexed = true;
-  } catch {}
-  return `✅ บันทึกเข้าสมองแล้ว: "${title}"\n   file: ψ/memory/learnings/${id}.md${indexed ? " · indexed" : " · (จะ index รอบถัดไป)"}`;
+    const r = await fetch(`${ARRA}/api/learn`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pattern, concepts: concepts.filter(Boolean), source: "brain-http" }),
+    });
+    const d: any = await r.json();
+    if (d?.success) return `✅ บันทึกเข้าสมองแล้ว (indexed + searchable): "${title}"\n   ${d.file} · id ${d.id}`;
+    return `⚠️ learn ไม่สำเร็จ: ${JSON.stringify(d).slice(0, 200)}`;
+  } catch (e: any) {
+    return `error: ${e?.message || e}`;
+  }
 }
 
 async function brainStats() {
